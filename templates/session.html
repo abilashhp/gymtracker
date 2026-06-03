@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}{{ session.label }} — {{ session.session_date }}{% endblock %}
+{% block head %}
+<style>
+  .ex-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 12px; overflow: hidden; }
+  .ex-block-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .ex-name { font-size: 14px; font-weight: 600; }
+  .sets-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sets-table th { font-size: 11px; color: var(--muted); font-weight: 500; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .sets-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  .sets-table tr:last-child td { border-bottom: none; }
+  .sets-table .del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+  .sets-table .del-btn:hover { color: var(--red); }
+  .pr-tag { font-size: 10px; font-weight: 700; background: var(--amber); color: #000; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+  .add-set-form { padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); }
+  .last-hint { font-size: 11px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+  #add-exercise-area { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
+  .autocomplete-list { position: absolute; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; z-index: 20; margin-top: 2px; max-height: 180px; overflow-y: auto; }
+  .autocomplete-list li { padding: 8px 12px; cursor: pointer; font-size: 13px; list-style: none; }
+  .autocomplete-list li:hover, .autocomplete-list li.active { background: var(--accent-dim); color: var(--accent); }
+  .pos-rel { position: relative; }
+  .stats-bar { display: flex; align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 20px; margin-bottom: 20px; }
+  .stat-item { flex: 1; text-align: center; }
+  .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.1; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .stat-divider { width: 1px; height: 36px; background: var(--border); }
+  .ex-best { font-size: 12px; color: var(--muted); }
+  .ex-best strong { color: var(--text); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="margin-bottom:20px">
+  <a href="/" class="text-muted" style="font-size:13px">← All sessions</a>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-top:8px;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.4px">{{ session.label }}</h1>
+      <p class="text-muted" style="font-size:13px;margin-top:2px">{{ session.session_date }}{% if session.notes %} · {{ session.notes }}{% endif %}</p>
+    </div>
+    <form method="POST" action="/session/{{ session.id }}/delete" onsubmit="return confirm('Delete this entire session?')">
+      <button type="submit" class="btn btn-danger btn-sm">Delete session</button>
+    </form>
+  </div>
+</div>
+
+{% if grouped %}
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-value">{{ grouped | length }}</div>
+    <div class="stat-label">exercise{{ 's' if grouped | length != 1 else '' }}</div>
+  </div>
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <div class="stat-value">{{ total_sets }}</div>
+    <div class="stat-label">set{{ 's' if total_sets != 1 else '' }}</div>
+  </div>
+  {% if total_volume > 0 %}
+  <div class="stat-divider"></div>
+  <div class="stat-item">
+    <div class="stat-value">{{ "{:,}".format(total_volume) }}</div>
+    <div class="stat-label">kg volume</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Add set panel -->
+<div id="add-exercise-area">
+  <div class="label" style="margin-bottom:10px">Log a set</div>
+  <div class="form-row-3" style="align-items:flex-start">
+    <div class="form-group mb-0 pos-rel">
+      <label class="form-label">Exercise name</label>
+      <input id="ex-name" type="text" placeholder="e.g. Bench press" autocomplete="off" oninput="onNameInput(this.value)" onkeydown="onNameKey(event)">
+      <ul class="autocomplete-list" id="ac-list" style="display:none"></ul>
+    </div>
+    <div class="form-group mb-0">
+      <label class="form-label">Weight (kg)</label>
+      <input id="ex-weight" type="number" step="0.5" min="0" placeholder="e.g. 60">
+    </div>
+    <div class="form-group mb-0">
+      <label class="form-label">Reps</label>
+      <input id="ex-reps" type="number" min="1" placeholder="e.g. 8">
+    </div>
+  </div>
+  <div id="last-hint" class="last-hint"></div>
+  <div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn btn-primary" onclick="addSet()" style="flex:1;justify-content:center">+ Log set</button>
+  </div>
+</div>
+
+<!-- Logged exercises -->
+<div id="exercises-container">
+{% if grouped %}
+  {% for ex_name, sets in grouped.items() %}
+  {% set pr_weight = sets | map(attribute='weight_kg') | select | max %}
+  <div class="ex-block" id="ex-block-{{ ex_name | replace(' ','_') | lower }}">
+    <div class="ex-block-header">
+      <span class="ex-name">{{ ex_name }}</span>
+      <div style="display:flex;align-items:center;gap:14px">
+        {% with stats = exercise_stats[ex_name] %}
+        {% if stats.max_weight is not none %}
+        <span class="ex-best">
+          Best&nbsp;<strong>{{ stats.max_weight | int if stats.max_weight == (stats.max_weight | int) else stats.max_weight }}kg</strong>
+          {% if stats.max_reps is not none %}&thinsp;×&thinsp;{{ stats.max_reps }}{% endif %}
+        </span>
+        {% endif %}
+        {% endwith %}
+        <span class="text-muted" style="font-size:12px">{{ sets|length }} set{{ 's' if sets|length != 1 else '' }}</span>
+      </div>
+    </div>
+    <table class="sets-table">
+      <thead>
+        <tr><th style="width:48px">Set</th><th>Weight</th><th>Reps</th><th style="width:36px"></th></tr>
+      </thead>
+      <tbody id="sets-{{ ex_name | replace(' ','_') | lower }}">
+        {% for s in sets %}
+        <tr id="row-{{ s.id }}">
+          <td class="text-muted">{{ s.set_number }}</td>
+          <td>
+            {% if s.weight_kg is not none %}
+              <strong>{{ s.weight_kg | int if s.weight_kg == s.weight_kg | int else s.weight_kg }} kg</strong>
+              {% if s.weight_kg == pr_weight %}<span class="pr-tag">PR</span>{% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>{{ s.reps if s.reps else '—' }}</td>
+          <td><button class="del-btn" onclick="deleteSet({{ s.id }}, this)" title="Remove set">×</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty" id="empty-state">
+    <div class="empty-icon">💪</div>
+    <p style="font-weight:500">No sets logged yet</p>
+    <p style="font-size:13px;margin-top:4px">Use the form above to start logging your exercises.</p>
+  </div>
+{% endif %}
+</div>
+
+<script>
+const SESSION_ID = {{ session.id }};
+let allExercises = [];
+let acIndex = -1;
+
+fetch('/api/exercise_names').then(r=>r.json()).then(names=>{ allExercises = names; });
+
+function onNameInput(val) {
+  acIndex = -1;
+  if (!val.trim()) { hideAc(); return; }
+  const matches = allExercises.filter(n => n.toLowerCase().includes(val.toLowerCase())).slice(0,8);
+  if (!matches.length) { hideAc(); return; }
+  const list = document.getElementById('ac-list');
+  list.innerHTML = matches.map((m,i)=>`<li onclick="selectAc('${m}')" data-i="${i}">${m}</li>`).join('');
+  list.style.display = 'block';
+  // also fetch last sets hint
+  fetchHint(val);
+}
+
+function onNameKey(e) {
+  const list = document.getElementById('ac-list');
+  const items = list.querySelectorAll('li');
+  if (e.key === 'ArrowDown') { acIndex = Math.min(acIndex+1, items.length-1); highlightAc(items); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { acIndex = Math.max(acIndex-1, 0); highlightAc(items); e.preventDefault(); }
+  else if (e.key === 'Enter' && acIndex >= 0) { selectAc(items[acIndex].textContent); e.preventDefault(); }
+  else if (e.key === 'Escape') hideAc();
+  else if (e.key === 'Tab') { hideAc(); }
+}
+
+function highlightAc(items) {
+  items.forEach((li,i)=>li.classList.toggle('active', i===acIndex));
+}
+
+function selectAc(name) {
+  document.getElementById('ex-name').value = name;
+  hideAc();
+  fetchHint(name);
+  document.getElementById('ex-weight').focus();
+}
+
+function hideAc() {
+  document.getElementById('ac-list').style.display = 'none';
+}
+
+function fetchHint(name) {
+  fetch('/api/last_sets/' + encodeURIComponent(name))
+    .then(r=>r.json()).then(sets=>{
+      const hint = document.getElementById('last-hint');
+      if (!sets.length) { hint.textContent = ''; return; }
+      const last = sets[0];
+      hint.innerHTML = `<span style="color:var(--accent)">Last logged:</span> ${last.weight_kg ?? '—'} kg × ${last.reps ?? '—'} reps on ${last.session_date}`;
+    });
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ex-name') && !e.target.closest('#ac-list')) hideAc();
+});
+
+async function addSet() {
+  const name = document.getElementById('ex-name').value.trim();
+  const weight = document.getElementById('ex-weight').value;
+  const reps = document.getElementById('ex-reps').value;
+  if (!name) { document.getElementById('ex-name').focus(); return; }
+
+  const res = await fetch(`/session/${SESSION_ID}/add_set`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ name, weight_kg: weight ? parseFloat(weight) : null, reps: reps ? parseInt(reps) : null })
+  });
+  const data = await res.json();
+  if (!data.ok) { alert(data.error); return; }
+
+  // remove empty state
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+
+  // add row to table or create new block
+  const blockId = 'ex-block-' + name.replace(/ /g,'_').toLowerCase();
+  const tbodyId = 'sets-' + name.replace(/ /g,'_').toLowerCase();
+  let tbody = document.getElementById(tbodyId);
+
+  if (!tbody) {
+    // new exercise block
+    const container = document.getElementById('exercises-container');
+    const block = document.createElement('div');
+    block.className = 'ex-block';
+    block.id = blockId;
+    block.innerHTML = `
+      <div class="ex-block-header">
+        <span class="ex-name">${name}</span>
+        <span class="text-muted" style="font-size:12px" id="count-${tbodyId}">0 sets</span>
+      </div>
+      <table class="sets-table">
+        <thead><tr><th style="width:48px">Set</th><th>Weight</th><th>Reps</th><th style="width:36px"></th></tr></thead>
+        <tbody id="${tbodyId}"></tbody>
+      </table>`;
+    container.appendChild(block);
+    tbody = document.getElementById(tbodyId);
+  }
+
+  const setNum = data.set_number;
+  const wText = weight ? `<strong>${parseFloat(weight)} kg</strong>` : `<span class="text-muted">—</span>`;
+  const rText = reps || '—';
+  const rowId = 'row-tmp-' + Date.now();
+  const tr = document.createElement('tr');
+  tr.id = rowId;
+  tr.innerHTML = `<td class="text-muted">${setNum}</td><td>${wText}</td><td>${rText}</td><td><button class="del-btn" title="Remove set">×</button></td>`;
+  tbody.appendChild(tr);
+
+  // update count
+  const countEl = document.getElementById('count-' + tbodyId);
+  if (countEl) {
+    const n = tbody.querySelectorAll('tr').length;
+    countEl.textContent = n + (n===1?' set':' sets');
+  }
+
+  // wire delete on new row — need row id from server; reload to get real id
+  // quick solution: reload the exercise block from server
+  tr.querySelector('.del-btn').onclick = () => { location.reload(); };
+
+  // clear inputs
+  document.getElementById('ex-weight').value = '';
+  document.getElementById('ex-reps').value = '';
+  document.getElementById('ex-name').focus();
+}
+
+async function deleteSet(exId, btn) {
+  if (!confirm('Remove this set?')) return;
+  const res = await fetch(`/session/${SESSION_ID}/delete_set/${exId}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (data.ok) {
+    const row = document.getElementById('row-' + exId);
+    if (row) row.remove();
+  }
+}
+</script>
+{% endblock %}

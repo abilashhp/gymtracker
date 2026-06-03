@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}GymTracker — Sessions{% endblock %}
+{% block head %}
+<style>
+  .week-group { margin-bottom: 32px; }
+  .week-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
+  .session-card { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 10px; text-decoration: none; color: var(--text); transition: border-color 0.15s, background 0.15s; }
+  .session-card:hover { border-color: var(--accent); background: var(--surface2); text-decoration: none; color: var(--text); }
+  .session-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .session-card-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .session-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-date { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .session-exercises { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .ex-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; border-radius: 6px; background: var(--surface2); color: var(--text); border: 1px solid var(--border); line-height: 1.4; }
+  .ex-chip-weight { color: var(--accent); font-weight: 600; font-size: 11px; }
+  .ex-chip-more { color: var(--muted); border-style: dashed; }
+  .session-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .session-meta { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+  .session-notes { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+  @media (max-width: 520px) {
+    .session-card-top { flex-wrap: wrap; gap: 6px; }
+    .session-notes { max-width: 100%; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+  <div>
+    <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.4px">Sessions</h1>
+    <p class="text-muted" style="font-size:13px;margin-top:2px">Last 30 workouts</p>
+  </div>
+  <a class="btn btn-primary" href="/session/new">+ New session</a>
+</div>
+
+{% if grouped_sessions %}
+  {% for group in grouped_sessions %}
+  <div class="week-group">
+    <div class="week-label">{{ group.week }}</div>
+    {% for s in group.sessions %}
+    <a href="/session/{{ s.id }}" class="session-card">
+      <div class="session-card-top">
+        <div class="session-card-left">
+          {% set lbl = s.label | lower %}
+          {% if "push" in lbl %}<span class="badge badge-push">Push</span>
+          {% elif "pull" in lbl %}<span class="badge badge-pull">Pull</span>
+          {% elif "leg" in lbl %}<span class="badge badge-legs">Legs</span>
+          {% elif "full" in lbl %}<span class="badge badge-full">Full Body</span>
+          {% else %}<span class="badge badge-other">{{ s.label }}</span>{% endif %}
+          <span class="session-name">{{ s.label }}</span>
+        </div>
+        <span class="session-date">{{ s.formatted_date }}</span>
+      </div>
+
+      {% if s.exercises %}
+      <div class="session-exercises">
+        {% for ex in s.exercises[:5] %}
+        <span class="ex-chip">
+          {{ ex.name }}
+          {% if ex.max_weight is not none %}
+          <span class="ex-chip-weight">{{ ex.max_weight | int if ex.max_weight == (ex.max_weight | int) else ex.max_weight }}kg</span>
+          {% endif %}
+        </span>
+        {% endfor %}
+        {% if s.exercises | length > 5 %}
+        <span class="ex-chip ex-chip-more">+{{ s.exercises | length - 5 }} more</span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="session-card-footer">
+        {% if s.notes %}<span class="session-notes">{{ s.notes }}</span>{% endif %}
+        <span class="session-meta">
+          {{ s.exercises | length }} exercise{{ 's' if s.exercises | length != 1 else '' }}
+          &nbsp;·&nbsp;
+          {{ s.total_sets }} set{{ 's' if s.total_sets != 1 else '' }}
+        </span>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">
+    <div class="empty-icon">🏋️</div>
+    <p style="font-weight:500;margin-bottom:6px">No sessions yet</p>
+    <p style="font-size:13px;margin-bottom:16px">Log your first workout to get started.</p>
+    <a class="btn btn-primary" href="/session/new">+ New session</a>
+  </div>
+{% endif %}
+{% endblock %}

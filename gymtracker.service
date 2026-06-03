@@ -1,0 +1,13 @@
+[Unit]
+Description=GymTracker Flask App
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/gymtracker
+ExecStart=/opt/gymtracker/venv/bin/gunicorn -c gunicorn.conf.py app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
