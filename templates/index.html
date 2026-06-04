@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block title %}GymTracker — Sessions{% endblock %}
+{% block container_class %}container-wide{% endblock %}
 {% block head %}
 <style>
+  /* Two-column layout */
+  .index-layout { display: grid; grid-template-columns: 1fr 272px; gap: 32px; align-items: start; }
+  .calendar-pane { position: sticky; top: 72px; }
+
+  /* Session list */
   .week-group { margin-bottom: 32px; }
   .week-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px; }
   .session-card { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 10px; text-decoration: none; color: var(--text); transition: border-color 0.15s, background 0.15s; }
@@ -9,16 +15,49 @@
   .session-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
   .session-card-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .session-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .session-date { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .session-exercises { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .ex-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; border-radius: 6px; background: var(--surface2); color: var(--text); border: 1px solid var(--border); line-height: 1.4; }
-  .ex-chip-weight { color: var(--accent); font-weight: 600; font-size: 11px; }
-  .ex-chip-more { color: var(--muted); border-style: dashed; }
+  .session-date-tag { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .session-mg-table { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+  .session-mg-row { display: flex; align-items: baseline; gap: 10px; font-size: 12px; line-height: 1.5; }
+  .session-mg-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); min-width: 68px; flex-shrink: 0; padding-top: 1px; }
+  .session-mg-exs { color: var(--text); flex-wrap: wrap; }
+  .session-mg-ex { white-space: nowrap; }
+  .session-mg-sep { color: var(--border); margin: 0 3px; }
+  .ex-w { color: var(--accent); font-weight: 600; font-size: 11px; }
   .session-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .session-meta { font-size: 12px; color: var(--muted); margin-left: auto; white-space: nowrap; }
   .session-notes { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
-  @media (max-width: 520px) {
-    .session-card-top { flex-wrap: wrap; gap: 6px; }
+
+  /* Calendar widget */
+  .calendar-widget { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .cal-title { font-size: 14px; font-weight: 600; }
+  .cal-nav { background: none; border: 1px solid var(--border); color: var(--muted); cursor: pointer; font-size: 12px; padding: 3px 8px; border-radius: var(--radius); line-height: 1.4; }
+  .cal-nav:hover { background: var(--surface2); color: var(--text); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-dow { text-align: center; font-size: 10px; font-weight: 600; color: var(--muted); padding: 4px 0 6px; }
+  .cal-day { text-align: center; font-size: 12px; padding: 4px 2px 3px; border-radius: 6px; position: relative; line-height: 1.3; min-height: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .cal-day-num { line-height: 1; }
+  .cal-dot { display: block; width: 5px; height: 5px; border-radius: 50%; margin-top: 3px; }
+  .cal-empty { }
+  .cal-today .cal-day-num { background: var(--accent); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .cal-workout { cursor: pointer; }
+  .cal-workout:hover { background: var(--surface2); }
+  .cal-push  { background: #1a0f06; } .cal-push  .cal-dot { background: var(--amber); }
+  .cal-pull  { background: var(--green-dim); } .cal-pull  .cal-dot { background: var(--green); }
+  .cal-legs  { background: var(--accent-dim); } .cal-legs  .cal-dot { background: var(--accent); }
+  .cal-full  { background: #1a0f28; } .cal-full  .cal-dot { background: #b07ef5; }
+  .cal-other { background: var(--surface2); } .cal-other .cal-dot { background: var(--muted); }
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cal-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .cal-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .cal-stats { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; }
+  .cal-stat { text-align: center; }
+  .cal-stat-val { font-size: 18px; font-weight: 700; }
+  .cal-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  @media (max-width: 760px) {
+    .index-layout { grid-template-columns: 1fr; }
+    .calendar-pane { position: static; order: -1; }
     .session-notes { max-width: 100%; }
   }
 </style>
@@ -32,59 +71,183 @@
   <a class="btn btn-primary" href="/session/new">+ New session</a>
 </div>
 
-{% if grouped_sessions %}
-  {% for group in grouped_sessions %}
-  <div class="week-group">
-    <div class="week-label">{{ group.week }}</div>
-    {% for s in group.sessions %}
-    <a href="/session/{{ s.id }}" class="session-card">
-      <div class="session-card-top">
-        <div class="session-card-left">
-          {% set lbl = s.label | lower %}
-          {% if "push" in lbl %}<span class="badge badge-push">Push</span>
-          {% elif "pull" in lbl %}<span class="badge badge-pull">Pull</span>
-          {% elif "leg" in lbl %}<span class="badge badge-legs">Legs</span>
-          {% elif "full" in lbl %}<span class="badge badge-full">Full Body</span>
-          {% else %}<span class="badge badge-other">{{ s.label }}</span>{% endif %}
-          <span class="session-name">{{ s.label }}</span>
-        </div>
-        <span class="session-date">{{ s.formatted_date }}</span>
-      </div>
+<div class="index-layout">
 
-      {% if s.exercises %}
-      <div class="session-exercises">
-        {% for ex in s.exercises[:5] %}
-        <span class="ex-chip">
-          {{ ex.name }}
-          {% if ex.max_weight is not none %}
-          <span class="ex-chip-weight">{{ ex.max_weight | int if ex.max_weight == (ex.max_weight | int) else ex.max_weight }}kg</span>
+  <!-- Sessions list -->
+  <div class="sessions-pane">
+    {% if grouped_sessions %}
+      {% for group in grouped_sessions %}
+      <div class="week-group">
+        <div class="week-label">{{ group.week }}</div>
+        {% for s in group.sessions %}
+        <a href="/session/{{ s.id }}" class="session-card">
+          <div class="session-card-top">
+            <div class="session-card-left">
+              {% set lbl = s.label | lower %}
+              {% if "push" in lbl %}<span class="badge badge-push">Push</span>
+              {% elif "pull" in lbl %}<span class="badge badge-pull">Pull</span>
+              {% elif "leg" in lbl %}<span class="badge badge-legs">Legs</span>
+              {% elif "full" in lbl %}<span class="badge badge-full">Full Body</span>
+              {% else %}<span class="badge badge-other">{{ s.label }}</span>{% endif %}
+              <span class="session-name">{{ s.label }}</span>
+            </div>
+            <span class="session-date-tag">{{ s.formatted_date }}</span>
+          </div>
+
+          {% if s.muscle_groups %}
+          <div class="session-mg-table">
+            {% for mg in s.muscle_groups %}
+            <div class="session-mg-row">
+              <span class="session-mg-label">{{ mg.muscle or '—' }}</span>
+              <span class="session-mg-exs">
+                {% for ex in mg.exercises %}
+                <span class="session-mg-ex">{{ ex.name }}{% if ex.max_weight is not none %}&thinsp;<span class="ex-w">{{ ex.max_weight | int if ex.max_weight == (ex.max_weight | int) else ex.max_weight }}kg</span>{% endif %}</span>{% if not loop.last %}<span class="session-mg-sep"> · </span>{% endif %}
+                {% endfor %}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
           {% endif %}
-        </span>
-        {% endfor %}
-        {% if s.exercises | length > 5 %}
-        <span class="ex-chip ex-chip-more">+{{ s.exercises | length - 5 }} more</span>
-        {% endif %}
-      </div>
-      {% endif %}
 
-      <div class="session-card-footer">
-        {% if s.notes %}<span class="session-notes">{{ s.notes }}</span>{% endif %}
-        <span class="session-meta">
-          {{ s.exercises | length }} exercise{{ 's' if s.exercises | length != 1 else '' }}
-          &nbsp;·&nbsp;
-          {{ s.total_sets }} set{{ 's' if s.total_sets != 1 else '' }}
-        </span>
+          <div class="session-card-footer">
+            {% if s.notes %}<span class="session-notes">{{ s.notes }}</span>{% endif %}
+            <span class="session-meta">
+              {{ s.exercises | length }} exercise{{ 's' if s.exercises | length != 1 else '' }}
+              &nbsp;·&nbsp;
+              {{ s.total_sets }} set{{ 's' if s.total_sets != 1 else '' }}
+            </span>
+          </div>
+        </a>
+        {% endfor %}
       </div>
-    </a>
-    {% endfor %}
+      {% endfor %}
+    {% else %}
+      <div class="empty">
+        <div class="empty-icon">🏋️</div>
+        <p style="font-weight:500;margin-bottom:6px">No sessions yet</p>
+        <p style="font-size:13px;margin-bottom:16px">Log your first workout to get started.</p>
+        <a class="btn btn-primary" href="/session/new">+ New session</a>
+      </div>
+    {% endif %}
   </div>
-  {% endfor %}
-{% else %}
-  <div class="empty">
-    <div class="empty-icon">🏋️</div>
-    <p style="font-weight:500;margin-bottom:6px">No sessions yet</p>
-    <p style="font-size:13px;margin-bottom:16px">Log your first workout to get started.</p>
-    <a class="btn btn-primary" href="/session/new">+ New session</a>
+
+  <!-- Calendar -->
+  <div class="calendar-pane">
+    <div class="calendar-widget">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="calPrev()">&#8592;</button>
+        <span class="cal-title" id="cal-title"></span>
+        <button class="cal-nav" onclick="calNext()">&#8594;</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-stats" id="cal-stats"></div>
+      <div class="cal-legend">
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--amber)"></span>Push</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--green)"></span>Pull</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--accent)"></span>Legs</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:#b07ef5"></span>Full Body</div>
+        <div class="cal-legend-item"><span class="cal-legend-dot" style="background:var(--muted)"></span>Other</div>
+      </div>
+    </div>
   </div>
-{% endif %}
+
+</div>
+
+<script>
+const CAL_DATA = {{ calendar_data | tojson }};
+const TODAY_STR = "{{ today }}";
+
+// Build map: date -> [{id, label}]
+const DATE_MAP = {};
+CAL_DATA.forEach(s => {
+  if (!DATE_MAP[s.date]) DATE_MAP[s.date] = [];
+  DATE_MAP[s.date].push({ id: s.id, label: s.label });
+});
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+let calYear, calMonth;
+
+function initCalendar() {
+  const t = new Date(TODAY_STR + 'T00:00:00');
+  calYear = t.getFullYear();
+  calMonth = t.getMonth();
+  renderCalendar();
+}
+
+function calPrev() {
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function calNext() {
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+
+function workoutClass(label) {
+  const l = label.toLowerCase();
+  if (l.includes('push')) return 'cal-push';
+  if (l.includes('pull')) return 'cal-pull';
+  if (l.includes('leg'))  return 'cal-legs';
+  if (l.includes('full')) return 'cal-full';
+  return 'cal-other';
+}
+
+function renderCalendar() {
+  document.getElementById('cal-title').textContent = `${MONTHS[calMonth]} ${calYear}`;
+
+  const firstDow = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
+  const offset = (firstDow === 0) ? 6 : firstDow - 1;      // Mon-based offset
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+  let html = DAYS.map(d => `<div class="cal-dow">${d}</div>`).join('');
+
+  for (let i = 0; i < offset; i++) html += `<div class="cal-empty"></div>`;
+
+  let monthWorkouts = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const sessions = DATE_MAP[ds] || [];
+    const isToday = ds === TODAY_STR;
+    const isWorkout = sessions.length > 0;
+
+    if (isWorkout) monthWorkouts++;
+
+    let cls = 'cal-day';
+    if (isToday) cls += ' cal-today';
+    if (isWorkout) {
+      cls += ' cal-workout ' + workoutClass(sessions[0].label);
+    }
+
+    const href = isWorkout ? `/session/${sessions[0].id}` : null;
+    const titles = sessions.map(s => s.label).join(', ');
+    const dot = isWorkout ? `<span class="cal-dot"></span>` : '';
+    const elem = href
+      ? `<a class="${cls}" href="${href}" title="${titles}"><span class="cal-day-num">${d}</span>${dot}</a>`
+      : `<div class="${cls}"><span class="cal-day-num">${d}</span>${dot}</div>`;
+    html += elem;
+  }
+
+  document.getElementById('cal-grid').innerHTML = html;
+
+  // Stats: workouts this month + all-time total
+  const total = CAL_DATA.length;
+  document.getElementById('cal-stats').innerHTML = `
+    <div class="cal-stat">
+      <div class="cal-stat-val">${monthWorkouts}</div>
+      <div class="cal-stat-lbl">this month</div>
+    </div>
+    <div class="cal-stat">
+      <div class="cal-stat-val">${total}</div>
+      <div class="cal-stat-lbl">total sessions</div>
+    </div>`;
+}
+
+initCalendar();
+</script>
 {% endblock %}

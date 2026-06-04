@@ -3,7 +3,7 @@
 {% block head %}
 <style>
   .ex-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 12px; overflow: hidden; }
-  .ex-block-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); }
+  .ex-block-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); gap: 10px; }
   .ex-name { font-size: 14px; font-weight: 600; }
   .sets-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .sets-table th { font-size: 11px; color: var(--muted); font-weight: 500; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
@@ -11,8 +11,10 @@
   .sets-table tr:last-child td { border-bottom: none; }
   .sets-table .del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
   .sets-table .del-btn:hover { color: var(--red); }
+  .sets-table td.editable { cursor: pointer; }
+  .sets-table td.editable:hover { background: var(--surface2); }
+  .cell-input { width: 64px; font-size: 13px; background: var(--surface2); border: 1px solid var(--accent); color: var(--text); border-radius: 4px; padding: 2px 6px; font-family: inherit; }
   .pr-tag { font-size: 10px; font-weight: 700; background: var(--amber); color: #000; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
-  .add-set-form { padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--border); }
   .last-hint { font-size: 11px; color: var(--muted); margin-top: 6px; min-height: 16px; }
   #add-exercise-area { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
   .autocomplete-list { position: absolute; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; z-index: 20; margin-top: 2px; max-height: 180px; overflow-y: auto; }
@@ -26,6 +28,40 @@
   .stat-divider { width: 1px; height: 36px; background: var(--border); }
   .ex-best { font-size: 12px; color: var(--muted); }
   .ex-best strong { color: var(--text); }
+  .ex-name { cursor: text; }
+  .ex-name:hover { border-bottom: 1px dashed var(--muted); }
+  .ex-name-input { font-size: 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--accent); color: var(--text); border-radius: 4px; padding: 1px 6px; font-family: inherit; min-width: 160px; }
+  /* Muscle groups */
+  .muscle-group-section { margin-bottom: 8px; }
+  .muscle-group-header {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 22px 0 8px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .muscle-group-header:first-child { margin-top: 0; }
+  .muscle-badge {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; white-space: nowrap; transition: border-color 0.15s, color 0.15s;
+  }
+  .muscle-badge:hover { border-color: var(--accent); color: var(--accent); }
+  .muscle-badge.assigned { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .muscle-panel {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+  .muscle-panel-label { font-size: 11px; color: var(--muted); margin-right: 4px; }
+  .muscle-option {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    font-size: 12px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    font-family: inherit; transition: background 0.1s, border-color 0.1s;
+  }
+  .muscle-option:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .muscle-option.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .del-btn { background: none; border: none; color: var(--muted); cursor: pointer; padding: 0 2px; line-height: 1; }
+  .del-btn:hover { color: var(--red); }
 </style>
 {% endblock %}
 {% block content %}
@@ -36,9 +72,27 @@
       <h1 style="font-size:20px;font-weight:600;letter-spacing:-0.4px">{{ session.label }}</h1>
       <p class="text-muted" style="font-size:13px;margin-top:2px">{{ session.session_date }}{% if session.notes %} · {{ session.notes }}{% endif %}</p>
     </div>
-    <form method="POST" action="/session/{{ session.id }}/delete" onsubmit="return confirm('Delete this entire session?')">
-      <button type="submit" class="btn btn-danger btn-sm">Delete session</button>
+    <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="toggleCopyForm()" id="copy-btn">⎘ Copy to another day</button>
+      <form method="POST" action="/session/{{ session.id }}/delete" onsubmit="return confirm('Delete this entire session?')">
+        <button type="submit" class="btn btn-danger btn-sm">Delete session</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="copy-form" style="display:none;margin-bottom:20px">
+  <div class="card" style="padding:14px 16px">
+    <div class="label" style="margin-bottom:10px">Copy session to another day</div>
+    <form method="POST" action="/session/{{ session.id }}/copy" style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px">
+        <label class="form-label">Target date</label>
+        <input type="date" name="target_date" required value="{{ today }}" min="2020-01-01">
+      </div>
+      <button type="submit" class="btn btn-primary">Copy session</button>
+      <button type="button" class="btn" onclick="toggleCopyForm()">Cancel</button>
     </form>
+    <p class="text-muted" style="font-size:12px;margin-top:8px">All exercises and sets will be copied. You can edit the new session afterwards.</p>
   </div>
 </div>
 
@@ -74,11 +128,13 @@
     </div>
     <div class="form-group mb-0">
       <label class="form-label">Weight (kg)</label>
-      <input id="ex-weight" type="number" step="0.5" min="0" placeholder="e.g. 60">
+      <input id="ex-weight" type="number" step="0.5" min="0" placeholder="e.g. 60"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('ex-reps').focus();}">
     </div>
     <div class="form-group mb-0">
       <label class="form-label">Reps</label>
-      <input id="ex-reps" type="number" min="1" placeholder="e.g. 8">
+      <input id="ex-reps" type="number" min="1" placeholder="e.g. 8"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addSet();}">
     </div>
   </div>
   <div id="last-hint" class="last-hint"></div>
@@ -87,46 +143,68 @@
   </div>
 </div>
 
-<!-- Logged exercises -->
+<!-- Logged exercises grouped by muscle -->
 <div id="exercises-container">
-{% if grouped %}
-  {% for ex_name, sets in grouped.items() %}
-  {% set pr_weight = sets | map(attribute='weight_kg') | select | max %}
-  <div class="ex-block" id="ex-block-{{ ex_name | replace(' ','_') | lower }}">
-    <div class="ex-block-header">
-      <span class="ex-name">{{ ex_name }}</span>
-      <div style="display:flex;align-items:center;gap:14px">
-        {% with stats = exercise_stats[ex_name] %}
-        {% if stats.max_weight is not none %}
-        <span class="ex-best">
-          Best&nbsp;<strong>{{ stats.max_weight | int if stats.max_weight == (stats.max_weight | int) else stats.max_weight }}kg</strong>
-          {% if stats.max_reps is not none %}&thinsp;×&thinsp;{{ stats.max_reps }}{% endif %}
-        </span>
-        {% endif %}
-        {% endwith %}
-        <span class="text-muted" style="font-size:12px">{{ sets|length }} set{{ 's' if sets|length != 1 else '' }}</span>
-      </div>
+{% if groups %}
+  {% for group in groups %}
+  <div class="muscle-group-section" id="mg-{{ (group.name or 'uncategorized') | replace(' ','_') | lower }}">
+    <div class="muscle-group-header">
+      <span>{{ group.name or 'Uncategorized' }}</span>
+      <span style="font-weight:400;font-size:11px">{{ group.exercises | length }} exercise{{ 's' if group.exercises | length != 1 else '' }}</span>
     </div>
-    <table class="sets-table">
-      <thead>
-        <tr><th style="width:48px">Set</th><th>Weight</th><th>Reps</th><th style="width:36px"></th></tr>
-      </thead>
-      <tbody id="sets-{{ ex_name | replace(' ','_') | lower }}">
-        {% for s in sets %}
-        <tr id="row-{{ s.id }}">
-          <td class="text-muted">{{ s.set_number }}</td>
-          <td>
-            {% if s.weight_kg is not none %}
-              <strong>{{ s.weight_kg | int if s.weight_kg == s.weight_kg | int else s.weight_kg }} kg</strong>
-              {% if s.weight_kg == pr_weight %}<span class="pr-tag">PR</span>{% endif %}
-            {% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td>{{ s.reps if s.reps else '—' }}</td>
-          <td><button class="del-btn" onclick="deleteSet({{ s.id }}, this)" title="Remove set">×</button></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% for ex_name, sets in group.exercises.items() %}
+    {% set pr_weight = sets | map(attribute='weight_kg') | select | max %}
+    <div class="ex-block" id="ex-block-{{ ex_name | replace(' ','_') | lower }}">
+      <div class="ex-block-header">
+        <span class="ex-name" data-ex="{{ ex_name | e }}" onclick="startRename(this)" title="Click to rename">{{ ex_name }}</span>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          {% with stats = exercise_stats[ex_name] %}
+          {% if stats.max_weight is not none %}
+          <span class="ex-best">
+            Best&nbsp;<strong>{{ stats.max_weight | int if stats.max_weight == (stats.max_weight | int) else stats.max_weight }}kg</strong>
+            {% if stats.max_reps is not none %}&thinsp;×&thinsp;{{ stats.max_reps }}{% endif %}
+          </span>
+          {% endif %}
+          {% endwith %}
+          <span class="text-muted" style="font-size:12px">{{ sets|length }} set{{ 's' if sets|length != 1 else '' }}</span>
+          <button class="muscle-badge {{ 'assigned' if ex_name in muscle_map else '' }}"
+                  data-ex="{{ ex_name | e }}"
+                  data-muscle="{{ muscle_map.get(ex_name, '') | e }}"
+                  onclick="editMuscle(this)"
+                  title="Set muscle group">
+            {{ muscle_map.get(ex_name) or '+ muscle' }}
+          </button>
+          <button class="del-btn" style="font-size:13px"
+                  data-ex="{{ ex_name | e }}"
+                  data-block="ex-block-{{ ex_name | replace(' ','_') | lower }}"
+                  onclick="deleteExercise(this)"
+                  title="Delete all sets for this exercise">&#128465;</button>
+        </div>
+      </div>
+      <table class="sets-table">
+        <thead>
+          <tr><th style="width:48px">Set</th><th>Weight</th><th>Reps</th><th style="width:36px"></th></tr>
+        </thead>
+        <tbody id="sets-{{ ex_name | replace(' ','_') | lower }}">
+          {% for s in sets %}
+          <tr id="row-{{ s.id }}">
+            <td class="text-muted">{{ s.set_number }}</td>
+            <td class="editable" data-field="weight" data-val="{{ s.weight_kg if s.weight_kg is not none else '' }}" onclick="editCell(this, {{ s.id }})" title="Click to edit">
+              {% if s.weight_kg is not none %}
+                <strong>{{ s.weight_kg | int if s.weight_kg == s.weight_kg | int else s.weight_kg }} kg</strong>
+                {% if s.weight_kg == pr_weight %}<span class="pr-tag">PR</span>{% endif %}
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td class="editable" data-field="reps" data-val="{{ s.reps if s.reps is not none else '' }}" onclick="editCell(this, {{ s.id }})" title="Click to edit">
+              {{ s.reps if s.reps else '—' }}
+            </td>
+            <td><button class="del-btn" onclick="deleteSet({{ s.id }}, this)" title="Remove set">×</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
   </div>
   {% endfor %}
 {% else %}
@@ -139,6 +217,133 @@
 </div>
 
 <script>
+const MUSCLE_GROUPS = ['Chest','Back','Shoulders','Biceps','Triceps','Legs','Glutes','Core','Cardio','Other'];
+
+function editCell(td, setId) {
+  if (td.querySelector('.cell-input')) return; // already editing
+  const field = td.dataset.field;
+  const original = td.innerHTML;
+  const currentVal = td.dataset.val;
+
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'cell-input';
+  input.step = field === 'weight' ? '0.5' : '1';
+  input.min = '0';
+  input.value = currentVal;
+  input.placeholder = field === 'weight' ? 'kg' : 'reps';
+  td.innerHTML = '';
+  td.appendChild(input);
+  input.focus();
+  input.select();
+
+  let saving = false;
+  async function save() {
+    if (saving) return;
+    saving = true;
+    const row = td.closest('tr');
+    const weightTd = row.querySelector('[data-field="weight"]');
+    const repsTd   = row.querySelector('[data-field="reps"]');
+    const wInput = weightTd.querySelector('.cell-input');
+    const rInput = repsTd.querySelector('.cell-input');
+    const newWeight = wInput ? (wInput.value ? parseFloat(wInput.value) : null)
+                             : (weightTd.dataset.val ? parseFloat(weightTd.dataset.val) : null);
+    const newReps   = rInput ? (rInput.value ? parseInt(rInput.value) : null)
+                             : (repsTd.dataset.val ? parseInt(repsTd.dataset.val) : null);
+
+    const res = await fetch(`/session/${SESSION_ID}/update_set/${setId}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ weight_kg: newWeight, reps: newReps })
+    });
+    const data = await res.json();
+    if (data.ok) location.reload();
+    else { td.innerHTML = original; saving = false; }
+  }
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') { td.innerHTML = original; }
+  });
+  input.addEventListener('blur', save);
+}
+
+function startRename(nameEl) {
+  const oldName = nameEl.dataset.ex;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'ex-name-input';
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  async function save() {
+    const newName = input.value.trim();
+    if (!newName || newName === oldName) { location.reload(); return; }
+    const res = await fetch(`/session/${SESSION_ID}/rename_exercise`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ old_name: oldName, new_name: newName })
+    });
+    const data = await res.json();
+    if (data.ok) location.reload();
+    else { alert(data.error || 'Error'); location.reload(); }
+  }
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    if (e.key === 'Escape') location.reload();
+  });
+  input.addEventListener('blur', save);
+}
+
+function editMuscle(badgeEl) {
+  const exName = badgeEl.dataset.ex;
+  const currentMuscle = badgeEl.dataset.muscle;
+  const blockId = 'ex-block-' + exName.replace(/ /g, '_').toLowerCase();
+  const block = document.getElementById(blockId);
+  if (!block) return;
+
+  const existing = block.querySelector('.muscle-panel');
+  if (existing) { existing.remove(); return; }
+
+  const panel = document.createElement('div');
+  panel.className = 'muscle-panel';
+  panel.innerHTML = '<span class="muscle-panel-label">Muscle group:</span>' +
+    MUSCLE_GROUPS.map(m => {
+      const btn = document.createElement('button');
+      btn.className = 'muscle-option' + (m === currentMuscle ? ' active' : '');
+      btn.textContent = m;
+      btn.addEventListener('click', () => saveMuscle(exName, m));
+      return btn.outerHTML;
+    }).join('');
+
+  // wire up after inserting so we avoid any HTML-encoding issues
+  block.querySelector('.ex-block-header').after(panel);
+  panel.querySelectorAll('.muscle-option').forEach((btn, i) => {
+    btn.addEventListener('click', () => saveMuscle(exName, MUSCLE_GROUPS[i]));
+  });
+}
+
+async function saveMuscle(exName, muscle) {
+  await fetch('/api/exercise_muscle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: exName, muscle_group: muscle })
+  });
+  location.reload();
+}
+
+function toggleCopyForm() {
+  const form = document.getElementById('copy-form');
+  const btn = document.getElementById('copy-btn');
+  const visible = form.style.display !== 'none';
+  form.style.display = visible ? 'none' : 'block';
+  btn.style.background = visible ? '' : 'var(--accent-dim)';
+  btn.style.borderColor = visible ? '' : 'var(--accent)';
+}
+
 const SESSION_ID = {{ session.id }};
 let allExercises = [];
 let acIndex = -1;
@@ -153,7 +358,6 @@ function onNameInput(val) {
   const list = document.getElementById('ac-list');
   list.innerHTML = matches.map((m,i)=>`<li onclick="selectAc('${m}')" data-i="${i}">${m}</li>`).join('');
   list.style.display = 'block';
-  // also fetch last sets hint
   fetchHint(val);
 }
 
@@ -162,13 +366,13 @@ function onNameKey(e) {
   const items = list.querySelectorAll('li');
   if (e.key === 'ArrowDown') { acIndex = Math.min(acIndex+1, items.length-1); highlightAc(items); e.preventDefault(); }
   else if (e.key === 'ArrowUp') { acIndex = Math.max(acIndex-1, 0); highlightAc(items); e.preventDefault(); }
-  else if (e.key === 'Enter' && acIndex >= 0) { selectAc(items[acIndex].textContent); e.preventDefault(); }
+  else if (e.key === 'Enter') { if (acIndex >= 0) selectAc(items[acIndex].textContent); hideAc(); document.getElementById('ex-weight').focus(); e.preventDefault(); }
   else if (e.key === 'Escape') hideAc();
-  else if (e.key === 'Tab') { hideAc(); }
+  else if (e.key === 'Tab') hideAc();
 }
 
 function highlightAc(items) {
-  items.forEach((li,i)=>li.classList.toggle('active', i===acIndex));
+  items.forEach((li,i) => li.classList.toggle('active', i===acIndex));
 }
 
 function selectAc(name) {
@@ -210,58 +414,75 @@ async function addSet() {
   const data = await res.json();
   if (!data.ok) { alert(data.error); return; }
 
-  // remove empty state
   const empty = document.getElementById('empty-state');
   if (empty) empty.remove();
 
-  // add row to table or create new block
   const blockId = 'ex-block-' + name.replace(/ /g,'_').toLowerCase();
   const tbodyId = 'sets-' + name.replace(/ /g,'_').toLowerCase();
   let tbody = document.getElementById(tbodyId);
 
   if (!tbody) {
-    // new exercise block
     const container = document.getElementById('exercises-container');
+    // append to uncategorized section if it exists, else container
+    let target = document.getElementById('mg-uncategorized') || container;
     const block = document.createElement('div');
     block.className = 'ex-block';
     block.id = blockId;
     block.innerHTML = `
       <div class="ex-block-header">
         <span class="ex-name">${name}</span>
-        <span class="text-muted" style="font-size:12px" id="count-${tbodyId}">0 sets</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="text-muted" style="font-size:12px" id="count-${tbodyId}">0 sets</span>
+          <button class="muscle-badge" data-ex="${name}" data-muscle="" onclick="editMuscle(this)" title="Set muscle group">+ muscle</button>
+        </div>
       </div>
       <table class="sets-table">
         <thead><tr><th style="width:48px">Set</th><th>Weight</th><th>Reps</th><th style="width:36px"></th></tr></thead>
         <tbody id="${tbodyId}"></tbody>
       </table>`;
-    container.appendChild(block);
+    target.appendChild(block);
     tbody = document.getElementById(tbodyId);
   }
 
   const setNum = data.set_number;
   const wText = weight ? `<strong>${parseFloat(weight)} kg</strong>` : `<span class="text-muted">—</span>`;
   const rText = reps || '—';
-  const rowId = 'row-tmp-' + Date.now();
   const tr = document.createElement('tr');
-  tr.id = rowId;
   tr.innerHTML = `<td class="text-muted">${setNum}</td><td>${wText}</td><td>${rText}</td><td><button class="del-btn" title="Remove set">×</button></td>`;
+  tr.querySelector('.del-btn').onclick = () => location.reload();
   tbody.appendChild(tr);
 
-  // update count
   const countEl = document.getElementById('count-' + tbodyId);
   if (countEl) {
     const n = tbody.querySelectorAll('tr').length;
     countEl.textContent = n + (n===1?' set':' sets');
   }
 
-  // wire delete on new row — need row id from server; reload to get real id
-  // quick solution: reload the exercise block from server
-  tr.querySelector('.del-btn').onclick = () => { location.reload(); };
-
-  // clear inputs
   document.getElementById('ex-weight').value = '';
   document.getElementById('ex-reps').value = '';
   document.getElementById('ex-name').focus();
+}
+
+async function deleteExercise(btn) {
+  const name = btn.dataset.ex;
+  const blockId = btn.dataset.block;
+  if (!confirm(`Remove all sets for "${name}"?`)) return;
+  const res = await fetch(`/session/${SESSION_ID}/delete_exercise`, {
+    method: 'DELETE',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    const block = document.getElementById(blockId);
+    if (block) block.remove();
+    if (!document.querySelector('.ex-block')) {
+      document.getElementById('exercises-container').innerHTML =
+        `<div class="empty" id="empty-state"><div class="empty-icon">💪</div><p style="font-weight:500">No sets logged yet</p><p style="font-size:13px;margin-top:4px">Use the form above to start logging your exercises.</p></div>`;
+    }
+    const bar = document.querySelector('.stats-bar');
+    if (bar) bar.style.display = 'none';
+  }
 }
 
 async function deleteSet(exId, btn) {

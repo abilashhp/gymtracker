@@ -22,6 +22,10 @@ def init_db():
                 label TEXT NOT NULL,
                 notes TEXT DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS exercise_muscles (
+                name TEXT PRIMARY KEY,
+                muscle_group TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS exercises (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -45,23 +49,38 @@ def index():
     monday = today_date - timedelta(days=today_date.weekday())
     last_monday = monday - timedelta(weeks=1)
 
+    def group_by_muscle(exs):
+        mg = {}
+        uncat = []
+        for ex in exs:
+            m = ex.get("muscle_group")
+            if m:
+                mg.setdefault(m, []).append(ex)
+            else:
+                uncat.append(ex)
+        result = [{"muscle": k, "exercises": v} for k, v in sorted(mg.items())]
+        if uncat:
+            result.append({"muscle": None, "exercises": uncat})
+        return result
+
     session_ids = [s["id"] for s in sessions]
     session_exercises = {}
     if session_ids:
         placeholders = ",".join("?" * len(session_ids))
         rows = db.execute(
-            f"""SELECT session_id, name, COUNT(*) as set_count,
-                       MAX(weight_kg) as max_weight, MAX(reps) as max_reps
-                FROM exercises WHERE session_id IN ({placeholders})
-                GROUP BY session_id, name
-                ORDER BY session_id, set_count DESC""",
+            f"""SELECT e.session_id, e.name, COUNT(*) as set_count,
+                       MAX(e.weight_kg) as max_weight,
+                       em.muscle_group
+                FROM exercises e
+                LEFT JOIN exercise_muscles em ON e.name = em.name
+                WHERE e.session_id IN ({placeholders})
+                GROUP BY e.session_id, e.name
+                ORDER BY e.session_id, COALESCE(em.muscle_group,'zzz'), e.name""",
             session_ids
         ).fetchall()
         for row in rows:
             sid = row["session_id"]
-            if sid not in session_exercises:
-                session_exercises[sid] = []
-            session_exercises[sid].append(dict(row))
+            session_exercises.setdefault(sid, []).append(dict(row))
 
     def week_label(date_str):
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -97,11 +116,18 @@ def index():
             "session_date": s["session_date"],
             "formatted_date": fmt_date(s["session_date"]),
             "exercises": exs,
+            "muscle_groups": group_by_muscle(exs),
             "total_sets": total_sets,
         })
 
+    all_cal = db.execute(
+        "SELECT id, session_date, label FROM sessions ORDER BY session_date"
+    ).fetchall()
+    calendar_data = [{"id": r["id"], "date": r["session_date"], "label": r["label"]}
+                     for r in all_cal]
+
     return render_template("index.html", grouped_sessions=grouped_sessions,
-                          today=today_date.isoformat())
+                          today=today_date.isoformat(), calendar_data=calendar_data)
 
 
 @app.route("/session/new", methods=["GET", "POST"])
@@ -134,6 +160,29 @@ def session_detail(session_id):
     for ex in exercises:
         grouped[ex["name"]].append(ex)
 
+    # Muscle group map
+    muscle_map = {}
+    if grouped:
+        mg_rows = db.execute(
+            "SELECT name, muscle_group FROM exercise_muscles WHERE name IN (%s)"
+            % ",".join("?" * len(grouped)),
+            list(grouped.keys())
+        ).fetchall()
+        muscle_map = {r["name"]: r["muscle_group"] for r in mg_rows}
+
+    # Group exercises by muscle group
+    mg_buckets = defaultdict(dict)
+    uncat = {}
+    for name, sets in grouped.items():
+        mg = muscle_map.get(name)
+        if mg:
+            mg_buckets[mg][name] = sets
+        else:
+            uncat[name] = sets
+    groups = [{"name": k, "exercises": v} for k, v in sorted(mg_buckets.items())]
+    if uncat:
+        groups.append({"name": None, "exercises": uncat})
+
     exercise_stats = {}
     for name, sets in grouped.items():
         weights = [s["weight_kg"] for s in sets if s["weight_kg"] is not None]
@@ -149,8 +198,10 @@ def session_detail(session_id):
     total_volume = sum(s["volume"] for s in exercise_stats.values())
 
     return render_template("session.html", session=session, grouped=dict(grouped),
+                          groups=groups, muscle_map=muscle_map,
                           exercise_stats=exercise_stats,
-                          total_sets=total_sets, total_volume=total_volume)
+                          total_sets=total_sets, total_volume=total_volume,
+                          today=date.today().isoformat())
 
 
 @app.route("/session/<int:session_id>/add_set", methods=["POST"])
@@ -177,12 +228,81 @@ def add_set(session_id):
     return jsonify({"ok": True, "set_number": set_num})
 
 
+@app.route("/session/<int:session_id>/rename_exercise", methods=["POST"])
+def rename_exercise(session_id):
+    data = request.get_json()
+    old_name = (data.get("old_name") or "").strip()
+    new_name = (data.get("new_name") or "").strip()
+    if not old_name or not new_name:
+        return jsonify({"error": "Both names required"}), 400
+    db = get_db()
+    db.execute(
+        "UPDATE exercises SET name=? WHERE session_id=? AND name=?",
+        (new_name, session_id, old_name)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/session/<int:session_id>/update_set/<int:ex_id>", methods=["PATCH"])
+def update_set(session_id, ex_id):
+    data = request.get_json()
+    reps = data.get("reps")
+    weight_kg = data.get("weight_kg")
+    db = get_db()
+    db.execute(
+        "UPDATE exercises SET reps=?, weight_kg=? WHERE id=? AND session_id=?",
+        (reps, weight_kg, ex_id, session_id)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/session/<int:session_id>/delete_exercise", methods=["DELETE"])
+def delete_exercise(session_id):
+    data = request.get_json()
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Exercise name required"}), 400
+    db = get_db()
+    db.execute("DELETE FROM exercises WHERE session_id=? AND name=?", (session_id, name))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/session/<int:session_id>/delete_set/<int:ex_id>", methods=["DELETE"])
 def delete_set(session_id, ex_id):
     db = get_db()
     db.execute("DELETE FROM exercises WHERE id=? AND session_id=?", (ex_id, session_id))
     db.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/session/<int:session_id>/copy", methods=["POST"])
+def copy_session(session_id):
+    target_date = request.form.get("target_date", "").strip()
+    if not target_date:
+        return redirect(url_for("session_detail", session_id=session_id))
+    db = get_db()
+    original = db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if not original:
+        return redirect(url_for("index"))
+    cur = db.execute(
+        "INSERT INTO sessions (session_date, label, notes) VALUES (?,?,?)",
+        (target_date, original["label"], original["notes"])
+    )
+    new_id = cur.lastrowid
+    exercises = db.execute(
+        "SELECT * FROM exercises WHERE session_id=? ORDER BY name, set_number",
+        (session_id,)
+    ).fetchall()
+    for ex in exercises:
+        db.execute(
+            "INSERT INTO exercises (session_id, name, set_number, reps, weight_kg, notes) VALUES (?,?,?,?,?,?)",
+            (new_id, ex["name"], ex["set_number"], ex["reps"], ex["weight_kg"], ex["notes"])
+        )
+    db.commit()
+    return redirect(url_for("session_detail", session_id=new_id))
 
 
 @app.route("/session/<int:session_id>/delete", methods=["POST"])
@@ -192,6 +312,23 @@ def delete_session(session_id):
     db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
     db.commit()
     return redirect(url_for("index"))
+
+
+@app.route("/api/exercise_muscle", methods=["POST"])
+def set_exercise_muscle():
+    data = request.get_json()
+    name = (data.get("name") or "").strip()
+    muscle = (data.get("muscle_group") or "").strip()
+    if not name or not muscle:
+        return jsonify({"error": "name and muscle_group required"}), 400
+    db = get_db()
+    db.execute(
+        "INSERT INTO exercise_muscles (name, muscle_group) VALUES (?,?)"
+        " ON CONFLICT(name) DO UPDATE SET muscle_group=excluded.muscle_group",
+        (name, muscle)
+    )
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/exercise_names")

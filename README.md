@@ -91,6 +91,9 @@ On your **local machine**, run:
 
 ```bash
 scp -r gymtracker/ root@YOUR_LINODE_IP:/opt/gymtracker
+[OR execute 
+scp -r --exclude='venv' --exclude='*.db' gymtracker/ root@172.235.27.103:/opt/gymtracker
+systemctl restart gymtracker]
 ```
 
 ---
@@ -99,7 +102,7 @@ scp -r gymtracker/ root@YOUR_LINODE_IP:/opt/gymtracker
 
 ```bash
 cd /opt/gymtracker
-python3 -m venv venv
+python3 -m venv venv [OR execute "python3 -m venv --copies /opt/gymtracker/venv"]
 source venv/bin/activate
 pip install -r requirements.txt
 pip install gunicorn
@@ -140,7 +143,7 @@ Paste this (replace YOUR_LINODE_IP or your domain):
 ```nginx
 server {
     listen 80;
-    server_name YOUR_LINODE_IP;
+    server_name 172.235.27.103;
 
     location / {
         proxy_pass http://127.0.0.1:5000;
@@ -181,8 +184,9 @@ Since this is a personal tracker, add HTTP Basic Auth via Nginx to block public 
 
 ```bash
 apt install -y apache2-utils
-htpasswd -c /etc/nginx/.gympasswd abhilash
+htpasswd -c /etc/nginx/.gympasswd Abhilash
 ```
+[Abhilash/PravikA]
 
 Add inside the `location /` block in your Nginx config:
 
@@ -200,6 +204,8 @@ Then reload Nginx: `systemctl reload nginx`
 ```bash
 # On your local machine:
 scp -r gymtracker/ root@YOUR_LINODE_IP:/opt/gymtracker
+[OR Execute
+    scp -r --exclude='venv' --exclude='*.db' gymtracker/ root@172.235.27.103:/opt/gymtracker]
 
 # On the server:
 systemctl restart gymtracker
@@ -212,7 +218,7 @@ systemctl restart gymtracker
 The entire database is one file. Copy it off the server anytime:
 
 ```bash
-scp root@YOUR_LINODE_IP:/opt/gymtracker/gymtracker.db ./gymtracker_backup.db
+scp root@172.235.27.103:/opt/gymtracker/gymtracker.db ./gymtracker_backup.db
 ```
 
 ---
